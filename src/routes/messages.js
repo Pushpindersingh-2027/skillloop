@@ -6,8 +6,9 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Post = require('../models/Post');
+const { getIO, userRoom } = require('../socket');
 
-// ── "Today 2:30 PM" / "Yesterday 9:04 AM" / "3 Sep 2:15 PM" ──
+// -- "Today 2:30 PM" / "Yesterday 9:04 AM" / "3 Sep 2:15 PM" --
 function stamp(d) {
   const date = new Date(d);
   const now = new Date();
@@ -54,7 +55,7 @@ async function listConversations(userId) {
   });
 }
 
-// ── GET /messages ──
+// -- GET /messages --
 // ?c=<conversationId>            open a conversation
 // ?to=<userId>&post=<postId>     start (or find) a conversation, then redirect
 router.get('/', async (req, res, next) => {
@@ -97,7 +98,7 @@ router.get('/', async (req, res, next) => {
     if (activeId) {
       const convo = await Conversation.findOne({
         _id: activeId,
-        participants: me,          // membership check — can't open someone else's chat
+        participants: me,          // membership check - can't open someone else's chat
       })
         .populate('participants', 'firstName lastName avatar')
         .populate('post', 'title')
@@ -144,7 +145,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// ── POST /messages/:id/send ──
+// -- POST /messages/:id/send --
 router.post('/:id/send', async (req, res, next) => {
   try {
     const me = req.user.id;
@@ -160,7 +161,7 @@ router.post('/:id/send', async (req, res, next) => {
     });
     if (!convo) return res.redirect('/messages');
 
-    await Message.create({
+    const msg = await Message.create({
       conversation: convo._id,
       sender: me,
       content,
@@ -171,13 +172,34 @@ router.post('/:id/send', async (req, res, next) => {
     convo.lastMessageAt = new Date();
     await convo.save();
 
+    // Real-time delivery: push to the other participant's private room.
+    // getIO() is null where no socket server runs (e.g. Vercel); the
+    // recipient's page then picks the message up by polling instead.
+    const io = getIO();
+    if (io) {
+      const payload = {
+        conversationId: convo._id.toString(),
+        id: msg._id.toString(),
+        content: msg.content,
+        stamp: stamp(msg.createdAt),
+        createdAt: msg.createdAt,
+      };
+      convo.participants
+        .map(String)
+        .filter(p => p !== String(me))
+        .forEach(p => {
+          io.to(userRoom(p)).emit('new_message', payload);
+          console.log(`Emitted new_message to user ${p}`);
+        });
+    }
+
     res.redirect('/messages?c=' + convo._id);
   } catch (err) {
     next(err);
   }
 });
 
-// ── GET /messages/:id/poll?since=<ISO> ── new messages only (JSON)
+// -- GET /messages/:id/poll?since=<ISO> -- new messages only (JSON)
 router.get('/:id/poll', async (req, res) => {
   try {
     const me = req.user.id;

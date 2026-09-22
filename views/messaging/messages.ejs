@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Messages – SkillLoop</title>
+  <title>Messages - SkillLoop</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/common/sidebar.css" />
@@ -16,7 +16,7 @@
 
   <div class="page">
 
-    <!-- ── Conversations ── -->
+    <!-- Conversations -->
     <div class="convos">
       <p class="sec-label">Conversations</p>
 
@@ -29,7 +29,7 @@
         <% }) %>
       <% } else { %>
         <div class="convo-empty">
-          No conversations yet — open a post in Browse and hit Send Message.
+          No conversations yet - open a post in Browse and hit Send Message.
         </div>
       <% } %>
     </div>
@@ -42,7 +42,7 @@
            data-convo="<%= active._id %>"
            data-since="<%= lastStamp ? new Date(lastStamp).toISOString() : '' %>">
         <% if (messages.length === 0) { %>
-          <p class="thread-empty" id="threadEmpty">No messages yet — say hello.</p>
+          <p class="thread-empty" id="threadEmpty">No messages yet - say hello.</p>
         <% } %>
         <% messages.forEach(function(m) { %>
           <div class="bubble <%= m.isMine ? 'me' : 'them' %>">
@@ -74,8 +74,20 @@
 
       var convoId = thread.dataset.convo;
       var since   = thread.dataset.since || '';
+      var seen    = {};           // ids already on screen, so socket + poll never duplicate
+      var socketLive = false;     // true while the real-time channel is connected
+
+      var FAST_POLL = 4000;       // no socket: poll as before
+      var SLOW_POLL = 20000;      // socket connected: poll only as a safety net
+
+      function isNearBottom() {
+        return thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+      }
 
       function addBubble(m) {
+        if (m.id && seen[m.id]) return;
+        if (m.id) seen[m.id] = true;
+
         var empty = document.getElementById('threadEmpty');
         if (empty) empty.remove();
 
@@ -84,7 +96,7 @@
 
         var p = document.createElement('p');
         p.className = 'text';
-        p.textContent = m.content;          // textContent — no HTML injection
+        p.textContent = m.content;          // textContent - no HTML injection
 
         var t = document.createElement('span');
         t.className = 'time';
@@ -95,23 +107,50 @@
         thread.appendChild(wrap);
       }
 
+      // Polling stays the source of truth. `since` only advances from poll
+      // results, so a message the socket missed is still fetched here.
       function poll() {
         var url = '/messages/' + convoId + '/poll' + (since ? '?since=' + encodeURIComponent(since) : '');
         fetch(url, { headers: { 'Accept': 'application/json' } })
           .then(function (r) { return r.ok ? r.json() : { messages: [] }; })
           .then(function (data) {
             if (!data.messages || !data.messages.length) return;
-            var nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+            var stick = isNearBottom();
             data.messages.forEach(function (m) {
               addBubble(m);
               since = m.createdAt;
             });
-            if (nearBottom) thread.scrollTop = thread.scrollHeight;
+            if (stick) thread.scrollTop = thread.scrollHeight;
           })
-          .catch(function () { /* offline — try again next tick */ });
+          .catch(function () { /* offline - try again next tick */ })
+          .then(schedule);
       }
 
-      setInterval(poll, 4000);
+      function schedule() {
+        setTimeout(poll, socketLive ? SLOW_POLL : FAST_POLL);
+      }
+
+      // Real-time channel. If the socket server isn't available (e.g. on
+      // Vercel), the script fails to load and the page runs on polling alone.
+      var s = document.createElement('script');
+      s.src = '/socket.io/socket.io.js';
+      s.onload = function () {
+        if (typeof io !== 'function') return;
+        var socket = io();
+        socket.on('connect', function () { socketLive = true; });
+        socket.on('disconnect', function () { socketLive = false; });
+        socket.on('connect_error', function () { socketLive = false; });
+        socket.on('new_message', function (m) {
+          if (m.conversationId !== convoId) return;
+          var stick = isNearBottom();
+          addBubble({ id: m.id, content: m.content, stamp: m.stamp, isMine: false });
+          if (stick) thread.scrollTop = thread.scrollHeight;
+        });
+      };
+      s.onerror = function () { /* no socket server - polling only */ };
+      document.head.appendChild(s);
+
+      schedule();
     })();
   </script>
 </body>
