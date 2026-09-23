@@ -122,8 +122,9 @@
            };
       %>
         <div class="pager">
+          <% if (page > 2) { %><a href="<%= qs(1) %>">« First</a><% } %>
           <% if (page > 1) { %><a href="<%= qs(page - 1) %>">‹ Prev</a><% } %>
-
+        
           <% for (var i = 1; i <= totalPages; i++) { %>
             <% if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) { %>
               <% if (i === page) { %>
@@ -135,8 +136,9 @@
               <span class="dots">…</span>
             <% } %>
           <% } %>
-
+            
           <% if (page < totalPages) { %><a href="<%= qs(page + 1) %>">Next ›</a><% } %>
+          <% if (page < totalPages - 1) { %><a href="<%= qs(totalPages) %>">Last »</a><% } %>
         </div>
       <% } %>
 
