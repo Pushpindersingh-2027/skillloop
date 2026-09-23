@@ -51,7 +51,7 @@
       <h3 class="sec-head">Your Posts</h3>
 
       <% if (typeof userPosts !== 'undefined' && userPosts.length > 0) { %>
-        <% userPosts.forEach(function(post) { %>
+        <% userPosts.slice(0, 3).forEach(function(post) { %>
           <div class="post-item">
             <div class="post-title"><%= post.title %></div>
             <div class="post-desc"><%= post.description %></div>
@@ -72,6 +72,8 @@
             </div>
           </div>
         <% }) %>
+
+        <a href="/posts?mine=1" class="btn-view-all">View All My Posts</a>
       <% } else { %>
         <p class="empty">
           You haven't created any posts yet.
