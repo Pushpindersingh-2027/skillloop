@@ -139,6 +139,17 @@
             
           <% if (page < totalPages) { %><a href="<%= qs(page + 1) %>">Next ›</a><% } %>
           <% if (page < totalPages - 1) { %><a href="<%= qs(totalPages) %>">Last »</a><% } %>
+
+          <form class="pager-jump" method="GET" action="/posts">
+            <% if (q)     { %><input type="hidden" name="q" value="<%= q %>" /><% } %>
+            <% if (type)  { %><input type="hidden" name="type" value="<%= type %>" /><% } %>
+            <% if (skill) { %><input type="hidden" name="skill" value="<%= skill %>" /><% } %>
+            <% if (mine)  { %><input type="hidden" name="mine" value="1" /><% } %>
+            <label for="jump-page">Go to</label>
+            <input type="number" id="jump-page" name="page" min="1" max="<%= totalPages %>"
+                   value="<%= page %>" />
+            <button type="submit">Go</button>
+          </form>
         </div>
       <% } %>
 
