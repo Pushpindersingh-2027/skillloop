@@ -274,3 +274,51 @@ body {
   color: #a89e9a;
   margin: 0 0 14px;
 }
+
+.pager-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid #f0ddd6;
+}
+.pager-jump label {
+  font-size: 11.5px;
+  color: #a09793;
+}
+.pager-jump input[type="number"] {
+  width: 46px;
+  padding: 4px 6px;
+  border: 1px solid #f0ddd6;
+  border-radius: 4px;
+  background: #fffaf8;
+  font-family: 'Assistant', sans-serif;
+  font-size: 12px;
+  color: #1f1f1f;
+  text-align: center;
+}
+.pager-jump input[type="number"]:focus {
+  outline: none;
+  border-color: #e8a48c;
+}
+.pager-jump button {
+  font-family: 'Assistant', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: #f4671c;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.pager-jump button:hover { background: #dc2029; }
+
+/* number input spinner arrows look inconsistent across browsers at this size — hide them */
+.pager-jump input[type="number"]::-webkit-inner-spin-button,
+.pager-jump input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pager-jump input[type="number"] { -moz-appearance: textfield; }
