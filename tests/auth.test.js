@@ -1,5 +1,6 @@
-const request = require('supertest');
+﻿const request = require('supertest');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 const createApp = require('../src/app');
 
 let app;
@@ -22,17 +23,21 @@ afterEach(async () => {
   await User.deleteMany({});
 });
 
+// Helper: sign up a user and return the response
+const signup = (firstName, password = 'password123') =>
+  request(app)
+    .post('/api/auth/signup')
+    .send({
+      firstName,
+      email: `${firstName.toLowerCase()}@skillloop.local`,
+      password
+    });
+
 // ─── Signup ───────────────────────────────────────────────────────────────────
 
 describe('POST /api/auth/signup', () => {
   it('creates a new user and returns a token', async () => {
-    const res = await request(app)
-      .post('/api/auth/signup')
-      .send({
-  firstName: 'Alice',
-  email: 'alice@skillloop.local',
-  password: 'password123'
-});
+    const res = await signup('Alice');
 
     expect(res.statusCode).toBe(201);
     expect(res.body.success).toBe(true);
@@ -44,37 +49,22 @@ describe('POST /api/auth/signup', () => {
   it('rejects signup when firstName is missing', async () => {
     const res = await request(app)
       .post('/api/auth/signup')
-      .send({ password: 'password123' });
+      .send({ email: 'nofirst@skillloop.local', password: 'password123' });
 
     expect(res.statusCode).toBe(400);
     expect(res.body.success).toBe(false);
   });
 
   it('rejects signup when password is too short', async () => {
-    const res = await request(app)
-      .post('/api/auth/signup')
-      .send({ firstName: 'Bob', password: '123' });
+    const res = await signup('Bob', '123');
 
     expect(res.statusCode).toBe(400);
     expect(res.body.success).toBe(false);
   });
 
   it('rejects duplicate user signup', async () => {
-    await request(app)
-      .post('/api/auth/signup')
-      .send({
-  firstName: 'Charlie',
-  email: 'charlie@skillloop.local',
-  password: 'password123'
-});
-
-    const res = await request(app)
-      .post('/api/auth/signup')
-      .send({
-  firstName: 'Charlie',
-  email: 'charlie@skillloop.local',
-  password: 'password123'
-});
+    await signup('Charlie');
+    const res = await signup('Charlie');
 
     expect(res.statusCode).toBe(400);
     expect(res.body.success).toBe(false);
@@ -86,13 +76,7 @@ describe('POST /api/auth/signup', () => {
 
 describe('POST /api/auth/signin', () => {
   beforeEach(async () => {
-    await request(app)
-      .post('/api/auth/signup')
-      .send({
-  firstName: 'Dave',
-  email: 'dave@skillloop.local',
-  password: 'password123'
-});
+    await signup('Dave');
   });
 
   it('signs in with correct credentials and returns a token', async () => {
@@ -133,18 +117,11 @@ describe('POST /api/auth/signin', () => {
   });
 });
 
-// ─── Protected route ──────────────────────────────────────────────────────────
+// ─── Protected route: GET /api/auth/me (verifyAuth) ──────────────────────────
 
 describe('GET /api/auth/me', () => {
   it('returns user data when token is valid', async () => {
-    const signupRes = await request(app)
-      .post('/api/auth/signup')
-      .send({
-  firstName: 'Eve',
-  email: 'eve@skillloop.local',
-  password: 'password123'
-});
-
+    const signupRes = await signup('Eve');
     const token = signupRes.body.token;
 
     const res = await request(app)
@@ -157,6 +134,59 @@ describe('GET /api/auth/me', () => {
 
   it('rejects request with no token', async () => {
     const res = await request(app).get('/api/auth/me');
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects request with an invalid token', async () => {
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer not-a-real-token');
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects request with an expired token', async () => {
+    const expiredToken = jwt.sign(
+      { id: new mongoose.Types.ObjectId().toString() },
+      process.env.JWT_SECRET,
+      { expiresIn: -10 }
+    );
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${expiredToken}`);
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects a token signed with the wrong secret', async () => {
+    const forgedToken = jwt.sign(
+      { id: new mongoose.Types.ObjectId().toString() },
+      'wrong-secret',
+      { expiresIn: '1h' }
+    );
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${forgedToken}`);
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── Other protected routes (verifyAuth) ─────────────────────────────────────
+
+describe('Protected auth routes without a token', () => {
+  it('rejects POST /api/auth/signout with no token', async () => {
+    const res = await request(app).post('/api/auth/signout');
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects PUT /api/auth/update-password with no token', async () => {
+    const res = await request(app)
+      .put('/api/auth/update-password')
+      .send({ currentPassword: 'password123', newPassword: 'newpassword123' });
+
     expect(res.statusCode).toBe(401);
   });
 });
