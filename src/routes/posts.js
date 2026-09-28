@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Post = require('../models/Post');
+const { requirePostOwner } = require('../middleware/postOwnership');
 
 const PER_PAGE = 5;
 
@@ -22,6 +23,7 @@ function timeAgo(date) {
 // ── helper: "Alex M." ──
 function shortName(author) {
   if (!author || !author.firstName) return 'SkillLoop User';
+  if (author.accountStatus === 'deleted') return 'Deleted User';
   const last = author.lastName ? ' ' + author.lastName.charAt(0).toUpperCase() + '.' : '';
   return author.firstName + last;
 }
@@ -55,7 +57,7 @@ router.get('/', async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * PER_PAGE)
       .limit(PER_PAGE)
-      .populate('author', 'firstName lastName')
+      .populate('author', 'firstName lastName accountStatus')
       .lean();
 
     const posts = raw.map(p => ({
@@ -69,11 +71,17 @@ router.get('/', async (req, res) => {
     const skillAgg = await Post.aggregate([
       { $match: { status: 'open' } },
       { $unwind: '$skills' },
-      { $group: { _id: '$skills', n: { $sum: 1 } } },
-      { $sort: { n: -1 } },
-      { $limit: 5 },
+      {
+        $group: {
+          _id: { $toLower: '$skills' },
+          n: { $sum: 1 },
+          display: { $first: '$skills' },
+        },
+      },
+      { $sort: { n: -1, _id: 1 } },
+      { $limit: 8 },
     ]);
-    const topSkills = skillAgg.map(s => s._id);
+    const topSkills = skillAgg.map(s => s.display);
 
     res.render('posts/list', {
       posts,
@@ -116,45 +124,28 @@ router.post('/create', async (req, res) => {
 });
 
 // GET /posts/:id/edit — edit form (owner only)
-router.get('/:id/edit', async (req, res) => {
-  try {
-    const post = await Post.findOne({
-      _id: req.params.id,
-      author: req.user.id,
-      status: { $ne: 'deleted' }
-    }).lean();
-
-    if (!post) return res.redirect('/posts?mine=1');
-
-    res.render('posts/edit', { post, error: null });
-  } catch (err) {
-    console.error('Edit load error:', err);
-    res.redirect('/posts?mine=1');
-  }
+router.get('/:id/edit', requirePostOwner, (req, res) => {
+  res.render('posts/edit', {
+    post: req.post,
+    error: null,
+  });
 });
 
 // POST /posts/:id/edit — save changes (owner only)
-router.post('/:id/edit', async (req, res) => {
+router.post('/:id/edit', requirePostOwner, async (req, res) => {
   const { type, title, description, skills, availability } = req.body;
 
   try {
-    const post = await Post.findOne({
-      _id: req.params.id,
-      author: req.user.id,
-      status: { $ne: 'deleted' }
-    }).lean();
-
-    if (!post) return res.redirect('/posts?mine=1');
 
     if (!type || !title || !description) {
       return res.render('posts/edit', {
-          post: { ...post, type, title, description, skills: (skills || '').split(',').map(s => s.trim()).filter(Boolean), availability },
+          post: { ...req.post, type, title, description, skills: (skills || '').split(',').map(s => s.trim()).filter(Boolean), availability },
         error: 'Type, title and description are required.'
       });
     }
 
-    await Post.findOneAndUpdate(
-      { _id: req.params.id, author: req.user.id },
+    await Post.findByIdAndUpdate(
+      req.post._id,
       {
         type,
         title,
@@ -172,10 +163,10 @@ router.post('/:id/edit', async (req, res) => {
 });
 
 // POST /posts/:id/delete
-router.post('/:id/delete', async (req, res) => {
+router.post('/:id/delete', requirePostOwner, async (req, res) => {
   try {
-    await Post.findOneAndUpdate(
-      { _id: req.params.id, author: req.user.id },
+    await Post.findByIdAndUpdate(
+      req.post._id,
       { status: 'deleted' }
     );
     res.redirect(req.get('referer') || '/posts');
@@ -185,10 +176,10 @@ router.post('/:id/delete', async (req, res) => {
 });
 
 // POST /posts/:id/resolve
-router.post('/:id/resolve', async (req, res) => {
+router.post('/:id/resolve', requirePostOwner, async (req, res) => {
   try {
-    await Post.findOneAndUpdate(
-      { _id: req.params.id, author: req.user.id },
+    await Post.findByIdAndUpdate(
+      req.post._id,
       { status: 'resolved' }
     );
     res.redirect(req.get('referer') || '/posts');
@@ -205,20 +196,27 @@ router.get('/:id', async (req, res, next) => {
     const raw = await Post.findOne({
       _id: req.params.id,
       status: { $ne: 'deleted' }
-    }).populate('author', 'firstName lastName school rating avatar').lean();
+    }).populate('author', 'firstName lastName school rating avatar accountStatus').lean();
 
     if (!raw) return res.redirect('/browse');
 
+    // Hide the real avatar once the account is soft-deleted — the name is
+    // already covered by shortName(), the avatar isn't, so it's done here.
+    const authorSafe = (raw.author && raw.author.accountStatus === 'deleted')
+      ? { ...raw.author, avatar: null }
+      : raw.author;
+
     const post = {
       ...raw,
+      author: authorSafe,
       timeAgo: timeAgo(raw.createdAt),
-      authorName: shortName(raw.author),
+      authorName: shortName(authorSafe),
     };
     const isOwner = raw.author && raw.author._id.toString() === req.user.id;
 
     const all = await Comment.find({ post: raw._id, status: 'active' })
       .sort({ createdAt: 1 })
-      .populate('author', 'firstName lastName')
+      .populate('author', 'firstName lastName accountStatus')
       .lean();
 
     const decorate = c => ({
