@@ -284,6 +284,8 @@ SkillLoop deploys to **Vercel** with separate **staging** and **production** env
 
 We use a **feature-branch workflow**: one branch and one pull request per feature.
 
+For team-wide naming conventions, folder structure, commit message format, code quality rules, testing expectations, and pull request standards, see the [SkillLoop Coding Standards](docs/CODING_STANDARDS.md).
+
 ```powershell
 git checkout main
 git pull
@@ -299,6 +301,19 @@ git push -u origin feat/your-feature-name
 Then open a pull request using the PR template (summary, linked Trello card, test checklist, reviewer notes).
 
 **Branch prefixes:** `feat/` new features · `fix/` bug fixes · `test/` tests · `docs/` documentation
+
+---
+
+## 👥 Team
+
+SkillLoop was developed by Team Skill Loop for SIT725 Applied Software Engineering at Deakin University.
+
+- Akashdeep Singh
+- Aaron Chewlun
+- Arjun Vennu
+- Manikkuwadu Kasun Wimalasuriya
+- Md Isa Sayek Huda
+- Pushpinder Singh
 
 ---
 
