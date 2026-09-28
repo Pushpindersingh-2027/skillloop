@@ -96,6 +96,7 @@ function createApp() {
   const postRoutes = require('./routes/posts');
   app.use('/posts', requireLogin, postRoutes);
 
+  app.use('/api', require('./routes/match'));
   // Profile routes
   const profileRoutes = require('./routes/profile');
   app.use('/profile', requireLogin, profileRoutes);
@@ -143,15 +144,10 @@ function createApp() {
         .sort({ createdAt: -1 })
         .lean();
 
-      // Suggested posts — open posts from OTHER users (up to 6)
-      const suggestedPosts = await Post.find({
-        author: { $ne: req.user.id },
-        status: 'open'
-      })
-        .sort({ createdAt: -1 })
-        .limit(6)
-        .populate('author', 'firstName lastName')
-        .lean();
+      // Suggested posts — AI-matched via /api/match logic, with automatic fallback
+      const { getSuggestionsForUser } = require('./routes/match');
+      const { suggestions: suggestedPosts, source: suggestionsSource } = await getSuggestionsForUser(req.user.id);
+      console.log('Suggestions source:', suggestionsSource);
 
       // Notifications placeholder (extend when you build a Notification model)
       const notifications = [];
@@ -161,6 +157,7 @@ function createApp() {
         currentUser: user,
         userPosts,
         suggestedPosts,
+        suggestionsSource,
         notifications
       });
     } catch (err) {
