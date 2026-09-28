@@ -83,11 +83,19 @@ function createApp() {
     next();
   });
 
+  // ===== Unread Message Count Middleware =====
+  const { attachUnreadCount } = require('./middleware/unreadCount');
+  app.use(attachUnreadCount);
+
   // ===== Routes =====
 
   // Auth routes
   const authRoutes = require('./routes/auth');
   app.use('/api/auth', authRoutes);
+
+  // User API routes (JSON) — public profile lookup, used e.g. for post-author summaries
+  const apiUserRoutes = require('./routes/apiUsers');
+  app.use('/api/users', verifyAuth, apiUserRoutes);
 
   // Posts routes
   const postRoutes = require('./routes/posts');

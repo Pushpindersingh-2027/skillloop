@@ -35,3 +35,8 @@ logs/
 # Scratch / assistant output
 Claude outputs/
 check.js
+
+
+# Jest coverage output
+coverage/
+.eslintcache
