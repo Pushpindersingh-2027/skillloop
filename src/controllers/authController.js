@@ -8,6 +8,10 @@ const generateToken = (userId) => {
   });
 };
 
+// Convert a Mongoose ValidationError into a readable message
+const getValidationMessage = (error) =>
+  Object.values(error.errors).map((e) => e.message).join(', ');
+
 // @desc    Sign up a new user
 // @route   POST /api/auth/signup
 // @access  Public
@@ -69,6 +73,14 @@ exports.signup = async (req, res) => {
       },
     });
   } catch (error) {
+    // Schema validation errors (e.g. password too short) are user input errors, not server errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: getValidationMessage(error),
+      });
+    }
+
     console.error('Signup error:', error);
     res.status(500).json({
       success: false,
@@ -241,6 +253,14 @@ exports.updatePassword = async (req, res) => {
       message: 'Password updated successfully',
     });
   } catch (error) {
+    // New password failing schema rules (e.g. too short) is a user input error
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: getValidationMessage(error),
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error updating password',
