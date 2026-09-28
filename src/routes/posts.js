@@ -104,14 +104,40 @@ router.get('/create', (req, res) => {
 router.post('/create', async (req, res) => {
   try {
     const { type, title, description, skills, availability } = req.body;
-    if (!type || !title || !description) {
+
+    const trimmedTitle = (title || '').trim();
+    const trimmedDescription = (description || '').trim();
+
+    if (!type || !trimmedTitle || !trimmedDescription) {
       return res.render('posts/create', {
-          error: 'Type, title and description are required.'
+        error: 'Type, title and description are required.'
       });
     }
+    if (trimmedTitle.length > 100) {
+      return res.render('posts/create', {
+        error: 'Title must be 100 characters or fewer.'
+      });
+    }
+    if (trimmedDescription.length > 2000) {
+      return res.render('posts/create', {
+        error: 'Description must be 2000 characters or fewer.'
+      });
+    }
+
+    const existing = await Post.findOne({
+      author: req.user.id,
+      title: trimmedTitle,
+      status: { $ne: 'deleted' }
+    });
+    if (existing) {
+      return res.render('posts/create', {
+        error: 'You already have a post with this title.'
+      });
+    }
+
     const skillsArray = skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [];
     await Post.create({
-      type, title, description,
+      type, title: trimmedTitle, description: trimmedDescription,
       skills: skillsArray,
       availability: availability || '',
       author: req.user.id,
@@ -136,20 +162,42 @@ router.post('/:id/edit', requirePostOwner, async (req, res) => {
   const { type, title, description, skills, availability } = req.body;
 
   try {
+    const trimmedTitle = (title || '').trim();
+    const trimmedDescription = (description || '').trim();
 
-    if (!type || !title || !description) {
-      return res.render('posts/edit', {
-          post: { ...req.post, type, title, description, skills: (skills || '').split(',').map(s => s.trim()).filter(Boolean), availability },
-        error: 'Type, title and description are required.'
-      });
+    // Re-render the form with what the user typed plus an error message
+    const renderError = (error) => res.render('posts/edit', {
+      post: { ...req.post, type, title, description, skills: (skills || '').split(',').map(s => s.trim()).filter(Boolean), availability },
+      error,
+    });
+
+    if (!type || !trimmedTitle || !trimmedDescription) {
+      return renderError('Type, title and description are required.');
+    }
+    if (trimmedTitle.length > 100) {
+      return renderError('Title must be 100 characters or fewer.');
+    }
+    if (trimmedDescription.length > 2000) {
+      return renderError('Description must be 2000 characters or fewer.');
+    }
+
+    // Duplicate check — same author, same title, excluding this post itself
+    const existing = await Post.findOne({
+      _id: { $ne: req.post._id },
+      author: req.user.id,
+      title: trimmedTitle,
+      status: { $ne: 'deleted' }
+    });
+    if (existing) {
+      return renderError('You already have a post with this title.');
     }
 
     await Post.findByIdAndUpdate(
       req.post._id,
       {
         type,
-        title,
-        description,
+        title: trimmedTitle,
+        description: trimmedDescription,
         skills: skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [],
         availability: availability || '',
       }
