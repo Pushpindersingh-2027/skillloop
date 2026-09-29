@@ -96,10 +96,13 @@ function createApp() {
   const postRoutes = require('./routes/posts');
   app.use('/posts', requireLogin, postRoutes);
 
+  const apiPostCreateRoutes = require('./routes/apiPostCreate');
+  app.use('/api/posts', verifyAuth, apiPostCreateRoutes);
   app.use('/api', require('./routes/match'));
   // Profile routes
   const profileRoutes = require('./routes/profile');
   app.use('/profile', requireLogin, profileRoutes);
+
 
   // Messaging routes
   const messageRoutes = require('./routes/messages');
