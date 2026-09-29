@@ -170,7 +170,7 @@ function createApp() {
   app.get('/browse', requireLogin, async (req, res, next) => {
     try {
       const Post = require('./models/Post');
-      const { timeAgo, shortName } = require('./routes/posts');
+      const { timeAgo, shortName } = require('./utils/postHelpers');
 
       const raw = await Post.find({ status: 'open' })
         .sort({ createdAt: -1 })
